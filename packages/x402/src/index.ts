@@ -287,6 +287,19 @@ export function getChannelAuthorizationDomain(chainId: number, escrowAddress: Ad
 }
 
 /**
+ * EIP-712 domain for call authorization signatures (on-chain verification)
+ * This is used by the smart contract to verify agent signatures during disputes
+ */
+export function getCallAuthorizationDomain(chainId: number, escrowAddress: Address) {
+  return {
+    name: "ChannelEscrow",
+    version: "1",
+    chainId,
+    verifyingContract: escrowAddress,
+  };
+}
+
+/**
  * EIP-712 types for channel authorization
  */
 export const CHANNEL_AUTHORIZATION_TYPES = {
@@ -296,5 +309,18 @@ export const CHANNEL_AUTHORIZATION_TYPES = {
     { name: "endpoint", type: "string" },
     { name: "nonce", type: "uint256" },
     { name: "timestamp", type: "uint256" },
+  ],
+} as const;
+
+/**
+ * EIP-712 types for call authorization (on-chain verification)
+ * This matches the CALL_AUTHORIZATION_TYPEHASH in the smart contract
+ */
+export const CALL_AUTHORIZATION_TYPES = {
+  CallAuthorization: [
+    { name: "callId", type: "bytes32" },
+    { name: "cost", type: "uint256" },
+    { name: "timestamp", type: "uint256" },
+    { name: "escrow", type: "address" },
   ],
 } as const;

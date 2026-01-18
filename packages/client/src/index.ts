@@ -9,6 +9,8 @@ import {
   serializePaymentAuthorization,
   getChannelAuthorizationDomain,
   CHANNEL_AUTHORIZATION_TYPES,
+  getCallAuthorizationDomain,
+  CALL_AUTHORIZATION_TYPES,
 } from "@x402-prototype/x402";
 import { 
   Hex, 
@@ -208,6 +210,40 @@ export class ChannelClient {
   }
 
   /**
+   * Create EIP-712 signature for call authorization (used in on-chain disputes)
+   * This signature proves the agent authorized a specific call
+   */
+  async signCallAuthorization(
+    callId: Hex,
+    cost: bigint,
+    timestamp: number
+  ): Promise<Hex> {
+    if (!this.walletClient) {
+      throw new Error("Wallet client not initialized");
+    }
+
+    const domain = getCallAuthorizationDomain(
+      this.config.chain.id,
+      this.config.escrowAddress
+    );
+
+    const signature = await this.walletClient.signTypedData({
+      account: this.walletClient.account!,
+      domain,
+      types: CALL_AUTHORIZATION_TYPES,
+      primaryType: "CallAuthorization",
+      message: {
+        callId,
+        cost,
+        timestamp: BigInt(timestamp),
+        escrow: this.config.escrowAddress,
+      },
+    });
+
+    return signature;
+  }
+
+  /**
    * Create payment authorization header
    */
   private async createPaymentAuthorization(endpoint: string): Promise<string> {
@@ -294,11 +330,20 @@ export class ChannelClient {
       throw new Error("Invalid server signature on receipt");
     }
 
-    // Track in Merkle tree
+    // Sign the call authorization for on-chain dispute resolution
+    // This EIP-712 signature proves the agent authorized this specific call
+    const callSignature = await this.signCallAuthorization(
+      receipt.callId as Hex,
+      receipt.cost,
+      receipt.timestamp
+    );
+
+    // Track in Merkle tree with signature
     const call: Call = {
       callId: receipt.callId,
       cost: receipt.cost,
       timestamp: receipt.timestamp,
+      signature: callSignature,
     };
 
     this.merkleTree.addCall(call);

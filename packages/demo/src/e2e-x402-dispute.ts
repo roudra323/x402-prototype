@@ -33,6 +33,8 @@ import {
   serializePaymentAuthorization,
   getChannelAuthorizationDomain,
   CHANNEL_AUTHORIZATION_TYPES,
+  getCallAuthorizationDomain,
+  CALL_AUTHORIZATION_TYPES,
 } from "@x402-prototype/x402";
 import { MerkleTree, Call } from "@x402-prototype/merkle";
 
@@ -68,7 +70,7 @@ const ESCROW_ABI = parseAbi([
   "function initiateClose(uint256 acknowledgedAmount, bytes32 checkpointRoot) external",
   "function facilitatorConfirm(address agent) external",
   "function facilitatorDispute(address agent, uint256 counterAmount, bytes32 merkleRoot) external",
-  "function submitProofs(address agent, (bytes32 callId, uint256 cost, uint256 timestamp)[] calldata calls, bytes32[][] calldata proofs) external",
+  "function submitProofs(address agent, (bytes32 callId, uint256 cost, uint256 timestamp, bytes signature)[] calldata calls, bytes32[][] calldata proofs) external",
   "function finalizeDispute(address agent) external",
   "function getChannel(address agent) view returns ((address agent, address facilitator, address payTo, uint256 balance, uint256 claimedAmount, uint256 disputedAmount, uint256 provenAmount, bytes32 checkpointRoot, uint256 checkpointAmount, uint256 disputeDeadline, uint256 proofDeadline, uint8 status))",
   "function getFacilitatorBond(address facilitator) view returns (uint256)",
@@ -213,10 +215,28 @@ async function runX402DisputeDemo() {
 
     if (resp.status === 200) {
       const result = await resp.json();
+      const callId = result.receipt.callId as Hex;
+      const callCost = BigInt(result.receipt.cost);
+      const callTimestamp = result.receipt.timestamp;
+
+      // Sign the call authorization for on-chain proof
+      const callSignature = await agentWallet.signTypedData({
+        domain: getCallAuthorizationDomain(ANVIL_CHAIN.id, ESCROW_ADDRESS),
+        types: CALL_AUTHORIZATION_TYPES,
+        primaryType: "CallAuthorization",
+        message: {
+          callId,
+          cost: callCost,
+          timestamp: BigInt(callTimestamp),
+          escrow: ESCROW_ADDRESS,
+        },
+      });
+
       const call: Call = {
-        callId: result.receipt.callId,
-        cost: BigInt(result.receipt.cost),
-        timestamp: result.receipt.timestamp,
+        callId,
+        cost: callCost,
+        timestamp: callTimestamp,
+        signature: callSignature,
       };
       calls.push(call);
       merkleTree.addCall(call);
@@ -301,19 +321,20 @@ async function runX402DisputeDemo() {
   console.log("─────────────────────────────────────────────────────────────────────────────");
   console.log();
 
-  // Build call data structs and proofs
-  const callDataStructs: { callId: Hex; cost: bigint; timestamp: bigint }[] = [];
+  // Build call data structs and proofs (including agent signatures for on-chain verification)
+  const callDataStructs: { callId: Hex; cost: bigint; timestamp: bigint; signature: Hex }[] = [];
   const proofs: Hex[][] = [];
 
   for (let i = 0; i < calls.length; i++) {
     const call = calls[i];
     callDataStructs.push({
-      callId: call.callId,
+      callId: call.callId as Hex,
       cost: call.cost,
       timestamp: BigInt(call.timestamp),
+      signature: call.signature!, // Agent's EIP-712 signature
     });
     proofs.push(merkleTree.getProof(i)); // Use index, not callId
-    console.log(`  Proof for call ${call.callId.slice(0, 10)}... → $${formatUnits(call.cost, 6)}`);
+    console.log(`  Proof for call ${call.callId.slice(0, 10)}... → $${formatUnits(call.cost, 6)} (with agent signature)`);
   }
 
   console.log();

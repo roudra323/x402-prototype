@@ -5,6 +5,7 @@ import {IERC20} from "./interfaces/IERC20.sol";
 import {IChannelEscrow} from "./interfaces/IChannelEscrow.sol";
 import {MerkleVerifier} from "./MerkleVerifier.sol";
 import {SafeERC20} from "./libraries/SafeERC20.sol";
+import {ECDSA} from "./libraries/ECDSA.sol";
 
 /**
  * @title ChannelEscrow
@@ -14,6 +15,7 @@ import {SafeERC20} from "./libraries/SafeERC20.sol";
 contract ChannelEscrow is IChannelEscrow {
     using MerkleVerifier for bytes32;
     using SafeERC20 for IERC20;
+    using ECDSA for bytes32;
 
     // ═══════════════════════════════════════════════════════════════════════
     // CONSTANTS
@@ -24,6 +26,15 @@ contract ChannelEscrow is IChannelEscrow {
     uint256 public constant PROOF_WINDOW = 5 days; // Time for facilitator to prove
     uint256 public constant DISPUTE_FEE = 500_000; // $0.50 dispute fee
     uint256 public constant FACILITATOR_BOND = 100_000_000; // $100 facilitator bond
+
+    // EIP-712 Domain Separator
+    bytes32 public immutable DOMAIN_SEPARATOR;
+
+    // EIP-712 TypeHash for CallAuthorization
+    bytes32 public constant CALL_AUTHORIZATION_TYPEHASH =
+        keccak256(
+            "CallAuthorization(bytes32 callId,uint256 cost,uint256 timestamp,address escrow)"
+        );
 
     // ═══════════════════════════════════════════════════════════════════════
     // STATE
@@ -45,6 +56,19 @@ contract ChannelEscrow is IChannelEscrow {
 
     constructor(address _token) {
         token = IERC20(_token);
+
+        // Build EIP-712 domain separator
+        DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+                ),
+                keccak256(bytes("ChannelEscrow")),
+                keccak256(bytes("1")),
+                block.chainid,
+                address(this)
+            )
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -276,8 +300,9 @@ contract ChannelEscrow is IChannelEscrow {
 
     /**
      * @notice Submit Merkle proofs during dispute
+     * @dev Each call must include the agent's EIP-712 signature to prove authorization
      * @param agent Address of the agent
-     * @param calls Array of call data to prove
+     * @param calls Array of call data to prove (includes signatures)
      * @param proofs Array of Merkle proofs
      */
     function submitProofs(
@@ -295,16 +320,32 @@ contract ChannelEscrow is IChannelEscrow {
         uint256 totalProven = 0;
 
         for (uint256 i = 0; i < calls.length; i++) {
+            // Skip if this call has already been proven (prevent duplicate submissions)
+            if (provenCalls[agent][calls[i].callId]) {
+                continue;
+            }
+
+            // 1. Verify the agent actually signed this call (TRUSTLESS SECURITY)
+            bytes32 structHash = keccak256(
+                abi.encode(
+                    CALL_AUTHORIZATION_TYPEHASH,
+                    calls[i].callId,
+                    calls[i].cost,
+                    calls[i].timestamp,
+                    address(this)
+                )
+            );
+            bytes32 digest = ECDSA.toTypedDataHash(DOMAIN_SEPARATOR, structHash);
+            address signer = ECDSA.recover(digest, calls[i].signature);
+
+            if (signer != agent) revert InvalidSignature();
+
+            // 2. Verify the call is in the Merkle tree
             bytes32 leaf = MerkleVerifier.computeCallHash(
                 calls[i].callId,
                 calls[i].cost,
                 calls[i].timestamp
             );
-
-            // Skip if this call has already been proven (prevent duplicate submissions)
-            if (provenCalls[agent][calls[i].callId]) {
-                continue;
-            }
 
             if (
                 !MerkleVerifier.verify(leaf, proofs[i], channel.checkpointRoot)

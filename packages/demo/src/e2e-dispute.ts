@@ -29,6 +29,10 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
 import { MerkleTree, Call } from "@x402-prototype/merkle";
+import {
+  getCallAuthorizationDomain,
+  CALL_AUTHORIZATION_TYPES,
+} from "@x402-prototype/x402";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONFIGURATION
@@ -60,7 +64,7 @@ const ESCROW_ABI = parseAbi([
   "function deposit(address facilitator, address payTo, uint256 amount) external",
   "function claimSettlement(address agent, uint256 amount, bytes32 merkleRoot) external",
   "function dispute(uint256 counterAmount) external",
-  "function submitProofs(address agent, (bytes32 callId, uint256 cost, uint256 timestamp)[] calls, bytes32[][] proofs) external",
+  "function submitProofs(address agent, (bytes32 callId, uint256 cost, uint256 timestamp, bytes signature)[] calls, bytes32[][] proofs) external",
   "function finalizeDispute(address agent) external",
   "function getChannel(address agent) view returns ((address agent, address facilitator, address payTo, uint256 balance, uint256 claimedAmount, uint256 disputedAmount, uint256 provenAmount, bytes32 checkpointRoot, uint256 checkpointAmount, uint256 disputeDeadline, uint256 proofDeadline, uint8 status))",
   "function getFacilitatorBond(address) view returns (uint256)",
@@ -178,11 +182,30 @@ async function runDisputeDemo() {
   const callCount = 100;
   const costPerCall = 10_000n; // $0.01
 
+  console.log("  Generating calls with agent signatures...");
+
   for (let i = 0; i < callCount; i++) {
+    const callId = keccak256(encodePacked(["uint256"], [BigInt(i + 1)])) as Hex;
+    const timestamp = Math.floor(Date.now() / 1000) + i;
+
+    // Sign the call authorization for on-chain proof verification
+    const signature = await agentWallet.signTypedData({
+      domain: getCallAuthorizationDomain(ANVIL_CHAIN.id, ESCROW_ADDRESS),
+      types: CALL_AUTHORIZATION_TYPES,
+      primaryType: "CallAuthorization",
+      message: {
+        callId,
+        cost: costPerCall,
+        timestamp: BigInt(timestamp),
+        escrow: ESCROW_ADDRESS,
+      },
+    });
+
     const call: Call = {
-      callId: keccak256(encodePacked(["uint256"], [BigInt(i + 1)])),
+      callId,
       cost: costPerCall,
-      timestamp: Math.floor(Date.now() / 1000) + i,
+      timestamp,
+      signature,
     };
     calls.push(call);
     merkleTree.addCall(call);
@@ -282,6 +305,7 @@ async function runDisputeDemo() {
       callId: c.callId as Hex,
       cost: c.cost,
       timestamp: BigInt(c.timestamp),
+      signature: c.signature!, // Agent's EIP-712 signature for on-chain verification
     }));
 
     const batchProofs = [];

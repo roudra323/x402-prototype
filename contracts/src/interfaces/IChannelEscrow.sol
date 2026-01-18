@@ -41,6 +41,7 @@ interface IChannelEscrow {
         bytes32 callId;
         uint256 cost;
         uint256 timestamp;
+        bytes signature; // Agent's EIP-712 signature authorizing this call
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -116,6 +117,7 @@ interface IChannelEscrow {
     error ProofWindowNotExpired();
     error Unauthorized();
     error InvalidAmount();
+    error InvalidSignature();
 
     // ═══════════════════════════════════════════════════════════════════════
     // FACILITATOR BOND FUNCTIONS
@@ -166,9 +168,17 @@ interface IChannelEscrow {
 
     function facilitatorConfirm(address agent) external;
 
+    function facilitatorDispute(
+        address agent,
+        uint256 counterAmount,
+        bytes32 merkleRoot
+    ) external;
+
     // ═══════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════
+
+    function DOMAIN_SEPARATOR() external view returns (bytes32);
 
     function getChannel(address agent) external view returns (Channel memory);
 

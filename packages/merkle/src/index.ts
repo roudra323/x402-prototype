@@ -7,6 +7,7 @@ export interface Call {
   callId: string;
   cost: bigint;
   timestamp: number;
+  signature?: Hex; // Agent's EIP-712 signature authorizing this call
 }
 
 /**
