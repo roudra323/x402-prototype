@@ -1,0 +1,34 @@
+{
+  "name": "x402-channel-prototype",
+  "version": "0.1.0",
+  "description": "Prototype for x402 channel payment scheme with Merkle proof dispute resolution",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "demo:happy": "pnpm --filter demo run happy",
+    "demo:dispute": "pnpm --filter demo run dispute",
+    "demo:x402": "pnpm --filter demo run x402-flow",
+    "demo:agent": "pnpm --filter demo run agent",
+    "demo:e2e": "pnpm --filter demo run e2e",
+    "demo:e2e-dispute": "pnpm --filter demo run e2e-dispute",
+    "demo:e2e-x402": "pnpm --filter demo run e2e-x402",
+    "server:start": "pnpm --filter server run start",
+    "contracts:build": "cd contracts && forge build",
+    "contracts:test": "cd contracts && forge test -vvv",
+    "contracts:deploy": "cd contracts && forge script script/Deploy.s.sol:DeployScript --rpc-url http://127.0.0.1:8545 --broadcast",
+    "contracts:deploy:cronos": "cd contracts && forge script script/DeployCronos.s.sol:DeployCronosScript --rpc-url https://evm-t3.cronos.org --broadcast --legacy",
+    "anvil": "anvil",
+    "e2e:happy": "bash scripts/run-e2e.sh",
+    "e2e:x402-flow": "bash scripts/run-x402-flow.sh",
+    "e2e:x402-dispute": "bash scripts/run-x402-dispute.sh"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "tsup": "^8.0.0",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
