@@ -21,7 +21,8 @@
     "anvil": "anvil",
     "e2e:happy": "bash scripts/run-e2e.sh",
     "e2e:x402-flow": "bash scripts/run-x402-flow.sh",
-    "e2e:x402-dispute": "bash scripts/run-x402-dispute.sh"
+    "e2e:x402-dispute": "bash scripts/run-x402-dispute.sh",
+    "e2e:x402-facilitator-dispute": "bash scripts/run-x402-facilitator-dispute.sh"
   },
   "devDependencies": {
     "typescript": "^5.3.0",

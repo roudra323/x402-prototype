@@ -10,7 +10,8 @@
     "e2e": "tsx src/e2e-integration.ts",
     "e2e-dispute": "tsx src/e2e-dispute.ts",
     "e2e-x402": "tsx src/e2e-x402-flow.ts",
-    "e2e-x402-dispute": "tsx src/e2e-x402-dispute.ts"
+    "e2e-x402-dispute": "tsx src/e2e-x402-dispute.ts",
+    "e2e-x402-facilitator-dispute": "tsx src/e2e-x402-facilitator-dispute.ts"
   },
   "dependencies": {
     "viem": "^2.0.0",

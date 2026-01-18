@@ -335,7 +335,10 @@ contract ChannelEscrow is IChannelEscrow {
                     address(this)
                 )
             );
-            bytes32 digest = ECDSA.toTypedDataHash(DOMAIN_SEPARATOR, structHash);
+            bytes32 digest = ECDSA.toTypedDataHash(
+                DOMAIN_SEPARATOR,
+                structHash
+            );
             address signer = ECDSA.recover(digest, calls[i].signature);
 
             if (signer != agent) revert InvalidSignature();
