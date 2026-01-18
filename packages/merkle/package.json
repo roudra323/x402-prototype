@@ -1,0 +1,19 @@
+{
+  "name": "@x402-prototype/merkle",
+  "version": "0.1.0",
+  "description": "Merkle tree library for x402 channel prototype",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "viem": "^2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "tsup": "^8.0.0",
+    "vitest": "^1.0.0"
+  }
+}
