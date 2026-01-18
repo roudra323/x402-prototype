@@ -1,0 +1,17 @@
+{
+  "name": "@x402-prototype/x402",
+  "version": "0.1.0",
+  "description": "x402 protocol types and utilities for channel scheme",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts"
+  },
+  "dependencies": {
+    "viem": "^2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "tsup": "^8.0.0"
+  }
+}
