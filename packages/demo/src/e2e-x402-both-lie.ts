@@ -465,6 +465,7 @@ async function runBothLieDemo() {
   const agentUnderclaim = provenAmount - agentLie;
   const agentPenalty = agentUnderclaim / 10n; // 10% penalty
   const facilitatorOverclaim = facilitatorLie - provenAmount;
+  const bondSlashed = initialBond - finalBond;
   
   // In this case, facilitator disputed agent's underclaim
   // So agent pays proven amount + penalty
@@ -477,7 +478,7 @@ async function runBothLieDemo() {
   console.log(`     Facilitator lied by: $${formatUnits(facilitatorOverclaim, 6)} (overclaim)`);
   console.log();
   console.log("  ═══════════════════════════════════════════════════════════════════════");
-  console.log("  ⚖️  THE JUDGMENT:");
+  console.log("  ⚖️  THE JUDGMENT - BOTH PUNISHED:");
   console.log("  ═══════════════════════════════════════════════════════════════════════");
   console.log();
   console.log("  🔴 AGENT'S PUNISHMENT (for underclaiming):");
@@ -486,14 +487,17 @@ async function runBothLieDemo() {
   console.log(`     Penalty (10%):       $${formatUnits(agentPenalty, 6)}`);
   console.log(`     TOTAL PAID:          $${formatUnits(agentPaid, 6)}`);
   console.log();
-  console.log("  🟠 FACILITATOR'S SITUATION:");
+  console.log("  🔥 FACILITATOR'S PUNISHMENT (for overclaiming):");
   console.log(`     Tried to claim:      $${formatUnits(facilitatorLie, 6)}`);
   console.log(`     Could only prove:    $${formatUnits(provenAmount, 6)}`);
-  console.log(`     Received:            $${formatUnits(agentPaid, 6)} (proven + agent penalty)`);
+  console.log(`     Initial bond:        $${formatUnits(initialBond, 6)}`);
+  console.log(`     Final bond:          $${formatUnits(finalBond, 6)}`);
+  console.log(`     BOND SLASHED:        $${formatUnits(bondSlashed, 6)} 🔥`);
   console.log();
   console.log("  💰 FINAL BALANCES:");
   console.log(`     Facilitator:         $${formatUnits(facilitatorBalanceAfter, 6)} USDC`);
-  console.log(`     Agent:               $${formatUnits(agentBalanceAfter, 6)} USDC`);
+  console.log(`     Agent:               $${formatUnits(agentBalanceAfter, 6)} USDC (includes bond compensation!)`);
+  console.log(`     Facilitator Bond:    $${formatUnits(finalBond, 6)} USDC`);
   console.log();
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -511,7 +515,7 @@ async function runBothLieDemo() {
   console.log();
   console.log("  THE VERDICT:");
   console.log(`    ❌ Agent caught underclaiming → PENALIZED $${formatUnits(agentPenalty, 6)}`);
-  console.log(`    ❌ Facilitator couldn't prove overclaim → Got only what was proven`);
+  console.log(`    ❌ Facilitator caught overclaiming → BOND SLASHED $${formatUnits(bondSlashed, 6)}`);
   console.log(`    ✅ TRUTH determined settlement: $${formatUnits(provenAmount, 6)}`);
   console.log();
   console.log("  KEY INSIGHT:");

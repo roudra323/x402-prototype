@@ -399,6 +399,22 @@ contract ChannelEscrow is IChannelEscrow {
                 settlementAmount = channel.balance;
             }
 
+            // Check if FACILITATOR also lied (claimed more than proven)
+            // This handles the "both parties lie" scenario
+            if (channel.disputedAmount > channel.provenAmount) {
+                uint256 facilitatorOverclaim = channel.disputedAmount - channel.provenAmount;
+                uint256 slashAmount = facilitatorOverclaim > facilitatorBonds[channel.facilitator]
+                    ? facilitatorBonds[channel.facilitator]
+                    : facilitatorOverclaim;
+
+                if (slashAmount > 0) {
+                    facilitatorBonds[channel.facilitator] -= slashAmount;
+                    // Send slashed amount to agent as compensation
+                    token.safeTransfer(agent, slashAmount);
+                    emit BondSlashed(channel.facilitator, slashAmount, facilitatorOverclaim);
+                }
+            }
+
             // Agent underclaimed: penalize with additional fee
             // Penalty = 10% of the underclaim amount (how much they tried to cheat)
             if (settlementAmount > channel.claimedAmount) {
