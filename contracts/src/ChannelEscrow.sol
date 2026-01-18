@@ -402,8 +402,10 @@ contract ChannelEscrow is IChannelEscrow {
             // Check if FACILITATOR also lied (claimed more than proven)
             // This handles the "both parties lie" scenario
             if (channel.disputedAmount > channel.provenAmount) {
-                uint256 facilitatorOverclaim = channel.disputedAmount - channel.provenAmount;
-                uint256 slashAmount = facilitatorOverclaim > facilitatorBonds[channel.facilitator]
+                uint256 facilitatorOverclaim = channel.disputedAmount -
+                    channel.provenAmount;
+                uint256 slashAmount = facilitatorOverclaim >
+                    facilitatorBonds[channel.facilitator]
                     ? facilitatorBonds[channel.facilitator]
                     : facilitatorOverclaim;
 
@@ -411,7 +413,11 @@ contract ChannelEscrow is IChannelEscrow {
                     facilitatorBonds[channel.facilitator] -= slashAmount;
                     // Send slashed amount to agent as compensation
                     token.safeTransfer(agent, slashAmount);
-                    emit BondSlashed(channel.facilitator, slashAmount, facilitatorOverclaim);
+                    emit BondSlashed(
+                        channel.facilitator,
+                        slashAmount,
+                        facilitatorOverclaim
+                    );
                 }
             }
 
