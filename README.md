@@ -1,6 +1,6 @@
 # x402 Channel Scheme Prototype
 
-A proposal for a new **"channel"** payment scheme for the [x402 protocol](https://github.com/coinbase/x402), enabling efficient micropayments for AI agents.
+A **trust-minimized** payment channel for the [x402 protocol](https://github.com/coinbase/x402), enabling efficient micropayments for AI agents with cryptographic dispute resolution.
 
 **Hackathon Track:** x402 Agentic Finance/Payment Track — Advanced Programmatic Settlement & Workflows
 
@@ -41,18 +41,49 @@ The **"channel"** scheme allows clients (particularly AI agents) to:
 
 ---
 
-## ✅ x402 Protocol Compliance
+## 🔐 Trust-Minimized Security
 
-This implementation follows the x402 standard:
+This implementation is **fully trustless** - neither party can cheat:
+
+### Signature Verification
+
+Every API call requires the agent's **EIP-712 signature**. During disputes, the contract verifies:
+
+```solidity
+// On-chain verification - facilitator CANNOT fabricate calls
+bytes32 digest = ECDSA.toTypedDataHash(DOMAIN_SEPARATOR, structHash);
+address signer = ECDSA.recover(digest, calls[i].signature);
+if (signer != agent) revert InvalidSignature(); // ❌ Rejected!
+```
+
+### Symmetrical Punishment
+
+| Party | If They Lie | Punishment |
+|-------|-------------|------------|
+| **Agent** (underclaims) | Claims $0.08, actual $0.16 | Pays proven amount + **10% penalty** |
+| **Facilitator** (overclaims) | Claims $0.48, actual $0.16 | Bond **slashed** for overclaim amount |
+| **Both lie** | Both caught | **BOTH get punished** |
+
+### Game Theory: Nash Equilibrium = Honesty
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  No matter what either party CLAIMS, the cryptographic proofs          │
+│  determine the TRUTH. Lying is always a losing strategy!               │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## ✅ x402 Protocol Compliance
 
 | x402 Requirement | Implementation | Status |
 |------------------|----------------|--------|
 | HTTP 402 Response | Server returns 402 when payment required | ✅ |
-| Payment Requirement Header | `X-Payment-Required` with pricing info | ✅ |
-| Payment Authorization Header | `X-Payment` with signed authorization | ✅ |
-| Payment Receipt Header | `X-Payment-Receipt` confirming call | ✅ |
+| `X-Payment-Required` Header | Pricing info with channel scheme | ✅ |
+| `X-Payment` Header | EIP-712 signed authorization | ✅ |
+| `X-Payment-Receipt` Header | Server-signed receipt | ✅ |
 | Scheme Identifier | `"channel"` (new scheme type) | ✅ |
-| EIP-712 Signatures | Typed data signing for authorization | ✅ |
 | On-chain Verification | Channel existence and balance checks | ✅ |
 | Replay Protection | Nonce-based authorization | ✅ |
 
@@ -84,8 +115,9 @@ Server →  Verify signature + on-chain channel
 Server ←  HTTP 200 OK + data
           X-Payment-Receipt: { callId, cost, serverSignature }
 
-STEP 4: Multiple calls tracked in Merkle tree
-═════════════════════════════════════════════
+STEP 4: Agent signs each call for on-chain proof
+════════════════════════════════════════════════
+Agent signs: CallAuthorization(callId, cost, timestamp, escrow)
 Both parties maintain identical Merkle trees
 Periodic checkpoints with mutual signatures
 
@@ -102,23 +134,58 @@ Agent  →  escrow.confirmClose()
 
 ## 🛡️ Dispute Resolution
 
-If there's a disagreement:
+### Scenario 1: Agent Lies (Underclaims)
 
 ```
-Facilitator claims $1.50
-Agent disputes: "I only owe $1.00"
+Agent made 5 calls worth $0.16
+Agent claims: $0.08 (trying to underpay!)
 
-↓ PROOF PHASE ↓
+↓ FACILITATOR DISPUTES ↓
 
-Facilitator submits Merkle proofs for each call
-Contract verifies: proven amount = $1.00
+Facilitator submits Merkle proofs + agent signatures
+Contract verifies each signature: ✅ Agent signed these calls
 
 ↓ RESOLUTION ↓
 
-✅ Facilitator proved: $1.00 (not $1.50!)
-✅ Facilitator bond slashed for overclaim
-✅ Agent dispute fee refunded
-✅ Settlement: $1.00 to server, $9.00 to agent
+Proven amount: $0.16
+Agent pays: $0.16 + 10% penalty = $0.176
+Agent PUNISHED for lying!
+```
+
+### Scenario 2: Facilitator Lies (Overclaims)
+
+```
+Agent made 5 calls worth $0.16
+Facilitator claims: $0.48 (trying to steal!)
+
+↓ AGENT DISPUTES ↓
+
+Facilitator tries to prove $0.48
+But only has signatures for $0.16!
+
+↓ RESOLUTION ↓
+
+Proven amount: $0.16
+Facilitator bond SLASHED by $0.32
+Agent receives slashed bond as compensation!
+```
+
+### Scenario 3: Both Lie
+
+```
+Actual usage: $0.16
+Agent claims: $0.08 (underclaim)
+Facilitator claims: $0.48 (overclaim)
+
+↓ PROOFS REVEAL TRUTH ↓
+
+Proven: $0.16
+
+↓ BOTH PUNISHED ↓
+
+Agent: Penalized $0.008 (10% of underclaim)
+Facilitator: Bond slashed $0.32 (full overclaim)
+TRUTH WINS!
 ```
 
 ---
@@ -127,22 +194,36 @@ Contract verifies: proven amount = $1.00
 
 ```
 x402-prototype/
-├── contracts/                    # Foundry smart contracts (Cronos EVM)
+├── contracts/                          # Foundry smart contracts (Cronos EVM)
 │   └── src/
-│       ├── ChannelEscrow.sol     # Main escrow contract
-│       ├── MerkleVerifier.sol    # On-chain proof verification
+│       ├── ChannelEscrow.sol           # Main escrow contract with dispute resolution
+│       ├── MerkleVerifier.sol          # On-chain Merkle proof verification
+│       ├── MockUSDC.sol                # Test ERC20 token
+│       ├── interfaces/
+│       │   ├── IChannelEscrow.sol      # Contract interface
+│       │   └── IERC20.sol              # Token interface
 │       └── libraries/
-│           └── SafeERC20.sol     # Safe token operations
+│           ├── ECDSA.sol               # EIP-712 signature recovery
+│           └── SafeERC20.sol           # Safe token operations
 ├── packages/
-│   ├── x402/                     # x402 types and utilities
-│   ├── merkle/                   # Merkle tree library
-│   ├── server/                   # x402-compliant API server
-│   ├── client/                   # AI agent client SDK
-│   └── demo/                     # Demo scripts
-│       ├── happy-path.ts         # Normal settlement flow
-│       ├── dispute-flow.ts       # Dispute resolution demo
-│       ├── x402-flow-demo.ts     # Full x402 protocol flow
-│       └── ai-agent-demo.ts      # AI agent simulation
+│   ├── x402/                           # x402 protocol types and utilities
+│   │   └── src/index.ts                # Types, headers, EIP-712 domains
+│   ├── merkle/                         # Merkle tree library
+│   │   └── src/index.ts                # Tree building and proof generation
+│   ├── server/                         # x402-compliant API server
+│   │   └── src/index.ts                # Express server with payment middleware
+│   ├── client/                         # AI agent client SDK
+│   │   └── src/index.ts                # Channel client with auto-signing
+│   └── demo/                           # Demo scripts
+│       ├── e2e-x402-flow.ts            # Full x402 happy path
+│       ├── e2e-x402-dispute.ts         # Agent underclaim scenario
+│       ├── e2e-x402-facilitator-dispute.ts  # Facilitator overclaim scenario
+│       └── e2e-x402-both-lie.ts        # Both parties lie scenario
+├── scripts/                            # Automation scripts
+│   ├── run-x402-flow.sh                # Run happy path demo
+│   ├── run-x402-dispute.sh             # Run agent underclaim demo
+│   ├── run-x402-facilitator-dispute.sh # Run facilitator overclaim demo
+│   └── run-x402-both-lie.sh            # Run both lie demo
 └── README.md
 ```
 
@@ -172,7 +253,7 @@ pnpm contracts:build
 ### Run Tests
 
 ```bash
-# Smart contract tests
+# Smart contract tests (14 tests)
 pnpm contracts:test
 
 # All tests pass:
@@ -187,130 +268,63 @@ pnpm contracts:test
 # ... and more
 ```
 
-### Run Demos
-
-```bash
-# Happy path (no dispute)
-pnpm demo:happy
-
-# Dispute resolution flow
-pnpm demo:dispute
-
-# Full x402 protocol flow
-pnpm demo:x402
-
-# AI agent simulation
-pnpm demo:agent
-```
-
-### Run End-to-End Demos (Real Blockchain)
-
-```bash
-# RECOMMENDED: Automated x402 protocol flow demo (starts Anvil, deploys, runs server)
-pnpm e2e:x402-flow
-
-# This shows the COMPLETE x402-compatible flow:
-#   1. Agent requests resource → Gets HTTP 402
-#   2. Agent opens channel on-chain
-#   3. Agent retries with X-Payment header
-#   4. Server verifies on-chain + returns resource
-#   5. Multiple API calls with receipts
-```
-
-**Manual step-by-step:**
-
-```bash
-# Terminal 1: Start local Anvil blockchain
-pnpm anvil
-
-# Terminal 2: Deploy contracts
-pnpm contracts:deploy
-
-# Terminal 2: Run E2E happy path demo
-pnpm demo:e2e
-
-# Terminal 2: Run E2E dispute demo (with bond slashing!)
-pnpm demo:e2e-dispute
-```
-
-The E2E demo executes **real on-chain transactions**:
-
-```
-STEP 2: Agent Opens Channel (ON-CHAIN)
-  📝 Approving $10 USDC...
-     TX: 0xdc180c94c50b0683...
-     Gas used: 46116
-  💰 Depositing to escrow...
-     TX: 0xa879a3205bebc18f...
-     Gas used: 171070
-
-  📊 Channel State (ON-CHAIN):
-     Status:      ACTIVE
-     Balance:     $10
-
-...
-
-STEP 6: Verify Final State (ON-CHAIN)
-  📊 Final Channel State:
-     Status: SETTLED
-  💰 Final Balances:
-     Agent USDC:       $999.5
-     Facilitator USDC: $9900.5
-
-  💰 GAS SAVINGS: 84%
-```
-
-### Start Server
-
-```bash
-# Start the x402-compliant server
-pnpm server:start
-```
-
 ---
 
-## 🔗 Cronos EVM Integration
+## 🎮 Demo Scripts
 
-This prototype is designed for deployment on Cronos EVM:
+### End-to-End Demos (Fully Automated)
 
-| Configuration | Value |
-|--------------|-------|
-| **Mainnet Chain ID** | 25 |
-| **Testnet Chain ID** | 338 |
-| **Mainnet RPC** | https://evm.cronos.org |
-| **Testnet RPC** | https://evm-t3.cronos.org |
-| **Token** | USDC |
-| **Explorer** | https://cronoscan.com |
+These scripts automatically start Anvil, deploy contracts, start the server, and run the demo:
 
-### Environment Variables
+| Command | Description | Who Lies? |
+|---------|-------------|-----------|
+| `pnpm e2e:x402-flow` | Happy path - honest settlement | Nobody |
+| `pnpm e2e:x402-dispute` | Agent underclaims | **Agent** |
+| `pnpm e2e:x402-facilitator-dispute` | Facilitator overclaims | **Facilitator** |
+| `pnpm e2e:x402-both-lie` | Both parties try to cheat | **Both** |
+
+### Example: Both Parties Lie Demo
 
 ```bash
-# Network (testnet/mainnet)
-NETWORK=testnet
-
-# Contract addresses (after deployment)
-ESCROW_ADDRESS=0x...
-USDC_ADDRESS=0x...
-
-# Server configuration
-PORT=3000
-SERVER_PRIVATE_KEY=0x...
-PAY_TO_ADDRESS=0x...
+pnpm e2e:x402-both-lie
 ```
 
----
+Output:
+```
+═══════════════════════════════════════════════════════════════════════════
+       🎭 BOTH PARTIES LIE - WHO WINS? 🎭                                   
+═══════════════════════════════════════════════════════════════════════════
 
-## 📊 Hackathon Track Alignment
+  Actual usage:          $0.16 (CRYPTOGRAPHIC TRUTH)
 
-**Track:** x402 Agentic Finance/Payment Track — Advanced Programmatic Settlement & Workflows
+  🎭 THE LIES:
+     Agent's LIE:             $0.08 (underclaim by $0.08)
+     Facilitator's LIE:       $0.48 (overclaim by $0.32)
 
-| Track Criteria | Our Implementation |
-|---------------|-------------------|
-| **Automated settlement pipelines** | ✅ Merkle proof-based settlement |
-| **Multi-leg transactions and batching** | ✅ Channel batches 100s of calls |
-| **Risk-managed agentic portfolios** | ✅ Facilitator bond system |
-| **Institutional-grade workflow automation** | ✅ Checkpoint-based reconciliation |
-| **Recurring or conditional instruction sets** | ✅ Session-based authorization |
+  📋 PROOF RESULTS (Truth vs Lies):
+     Agent claimed:       $0.08 ❌ LIE
+     Facilitator claimed: $0.48 ❌ LIE
+     PROVEN (TRUTH):      $0.16 ✅
+
+  ⚖️  THE JUDGMENT - BOTH PUNISHED:
+
+  🔴 AGENT'S PUNISHMENT (for underclaiming):
+     Penalty (10%):       $0.008
+
+  🔥 FACILITATOR'S PUNISHMENT (for overclaiming):
+     BOND SLASHED:        $0.32 🔥
+
+  ✅ TRUTH determined settlement: $0.16
+```
+
+### Simple Demos (Without Blockchain)
+
+```bash
+pnpm demo:happy     # Happy path simulation
+pnpm demo:dispute   # Dispute simulation
+pnpm demo:x402      # x402 flow simulation
+pnpm demo:agent     # AI agent simulation
+```
 
 ---
 
@@ -318,13 +332,67 @@ PAY_TO_ADDRESS=0x...
 
 | Feature | Description |
 |---------|-------------|
+| **EIP-712 Call Signatures** | Each call requires agent's typed signature |
+| **On-chain Signature Verification** | Contract verifies signatures during dispute |
+| **ECDSA Library** | Custom signature recovery for proof validation |
 | **SafeERC20** | Handles tokens that return false |
 | **Facilitator Bond** | $100 stake, slashed for fraud |
 | **Dispute Window** | 7-day period to contest claims |
 | **Proof Window** | 5-day period for evidence submission |
 | **Replay Protection** | Nonce-based authorization |
 | **Duplicate Proof Prevention** | CallID tracking in contract |
-| **EIP-712 Signatures** | Typed data for authorization |
+| **Symmetrical Punishment** | Both parties penalized for lying |
+
+### Trust Model
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    TRUST-MINIMIZED ARCHITECTURE                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  AGENT PROTECTION:                                                       │
+│    ✅ Facilitator cannot fabricate proofs (no agent signatures)         │
+│    ✅ Overclaim → Bond slashed                                          │
+│    ✅ Agent receives slashed bond as compensation                       │
+│                                                                          │
+│  FACILITATOR PROTECTION:                                                 │
+│    ✅ Agent cannot deny signed calls (on-chain verification)            │
+│    ✅ Underclaim → 10% penalty                                          │
+│    ✅ All calls cryptographically provable                              │
+│                                                                          │
+│  RESULT: Neither party can profitably cheat!                            │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📊 Smart Contract Details
+
+### ChannelEscrow.sol
+
+| Function | Description |
+|----------|-------------|
+| `deposit()` | Open channel with facilitator |
+| `topUp()` | Add more funds to channel |
+| `initiateClose()` | Start settlement with claimed amount |
+| `confirmClose()` | Complete settlement after dispute window |
+| `dispute()` | Agent disputes facilitator's claim |
+| `facilitatorDispute()` | Facilitator disputes agent's underclaim |
+| `submitProofs()` | Submit Merkle proofs with signatures |
+| `finalizeDispute()` | Resolve dispute based on proven amount |
+| `depositBond()` | Facilitator stakes bond |
+| `withdrawBond()` | Facilitator withdraws bond |
+
+### Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `MIN_DEPOSIT` | $10 | Minimum channel deposit |
+| `DISPUTE_WINDOW` | 7 days | Time to raise dispute |
+| `PROOF_WINDOW` | 5 days | Time to submit proofs |
+| `DISPUTE_FEE` | $0.50 | Fee to raise dispute (refundable) |
+| `FACILITATOR_BOND` | $100 | Required facilitator stake |
+| `PENALTY_RATE` | 10% | Agent penalty for underclaim |
 
 ---
 
@@ -340,24 +408,76 @@ For an AI agent making 1000 API calls:
 
 ---
 
+## 🔗 Cronos EVM Integration
+
+| Configuration | Value |
+|--------------|-------|
+| **Mainnet Chain ID** | 25 |
+| **Testnet Chain ID** | 338 |
+| **Mainnet RPC** | https://evm.cronos.org |
+| **Testnet RPC** | https://evm-t3.cronos.org |
+| **Token** | USDC |
+| **Explorer** | https://cronoscan.com |
+
+### Deploy to Cronos Testnet
+
+```bash
+# Set your private key
+export PRIVATE_KEY=0x...
+
+# Deploy
+pnpm contracts:deploy:cronos
+```
+
+---
+
 ## 🤖 AI Agent Use Case
 
 ```typescript
-// AI Agent using x402 channel
+import { ChannelClient } from "@x402-prototype/client";
+
+// Create client
 const agent = new ChannelClient(config, agentAddress);
 
 // Open channel with budget
 await agent.openChannel(walletClient, publicClient, 10_000_000n); // $10
 
-// Make API calls (no per-call signatures needed!)
-const weather = await agent.makeCall("/api/weather");
-const data = await agent.makeCall("/api/data");
-const premium = await agent.makeCall("/api/premium");
+// Make API calls (each call is automatically signed!)
+const weather = await agent.makeCall("/api/weather");  // Signs EIP-712
+const data = await agent.makeCall("/api/data");        // Signs EIP-712
+const premium = await agent.makeCall("/api/premium");  // Signs EIP-712
 // ... 100s more calls
 
 // Close and settle
 await agent.closeChannel(walletClient, publicClient);
+// Automatic: merkle root, claimed amount, dispute window
 ```
+
+---
+
+## 📊 Hackathon Track Alignment
+
+**Track:** x402 Agentic Finance/Payment Track — Advanced Programmatic Settlement & Workflows
+
+| Track Criteria | Our Implementation |
+|---------------|-------------------|
+| **Automated settlement pipelines** | ✅ Merkle proof-based settlement |
+| **Multi-leg transactions and batching** | ✅ Channel batches 100s of calls |
+| **Risk-managed agentic portfolios** | ✅ Facilitator bond system |
+| **Institutional-grade workflow automation** | ✅ Checkpoint-based reconciliation |
+| **Recurring or conditional instruction sets** | ✅ Session-based authorization |
+| **Trust-minimized architecture** | ✅ Signature verification, symmetrical punishment |
+
+---
+
+## 🧪 Testing Scenarios
+
+| Scenario | Command | Expected Result |
+|----------|---------|-----------------|
+| Happy path | `pnpm e2e:x402-flow` | Settlement at agreed amount |
+| Agent lies | `pnpm e2e:x402-dispute` | Agent penalized 10% |
+| Facilitator lies | `pnpm e2e:x402-facilitator-dispute` | Bond slashed |
+| Both lie | `pnpm e2e:x402-both-lie` | Both punished |
 
 ---
 
@@ -374,3 +494,19 @@ await agent.closeChannel(walletClient, publicClient);
 ## 📄 License
 
 Apache-2.0
+
+---
+
+## 👥 Team
+
+Built for the x402 Hackathon on Cronos EVM.
+
+---
+
+## 🔮 Future Improvements
+
+- [ ] Multi-facilitator support
+- [ ] Watchtower service for automated disputes
+- [ ] L2 deployment for lower gas costs
+- [ ] Channel network for cross-service payments
+- [ ] Mobile SDK
