@@ -263,7 +263,8 @@ contract ChannelEscrow is IChannelEscrow {
 
         channel.disputedAmount = counterAmount;
         channel.checkpointRoot = merkleRoot; // Update to facilitator's root
-        channel.provenAmount = channel.checkpointAmount;
+        // IMPORTANT: Start from 0 - facilitator must prove ALL usage, not build on agent's lie
+        channel.provenAmount = 0;
         channel.proofDeadline = block.timestamp + PROOF_WINDOW;
         channel.status = ChannelStatus.DISPUTED;
 
