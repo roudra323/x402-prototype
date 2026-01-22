@@ -31,8 +31,8 @@ This creates a Nash equilibrium where honesty is always the optimal strategy, en
 
 | Contract | Address | Explorer |
 |----------|---------|----------|
-| **ChannelEscrow** | `0x...` | [View](https://explorer.cronos.org/testnet/address/0x...) |
-| **MockUSDC** | `0x...` | [View](https://explorer.cronos.org/testnet/address/0x...) |
+| **ChannelEscrow** | `0x00d09A4218759Ba9e4f00aE50c27407AEf4B5B26` | [View](https://explorer.cronos.org/testnet/address/0x00d09A4218759Ba9e4f00aE50c27407AEf4B5B26) |
+| **MockUSDC** | `0xAdeeb27C383f8637482c5054dBdD7eA2C91B8b5A` | [View](https://explorer.cronos.org/testnet/address/0xAdeeb27C383f8637482c5054dBdD7eA2C91B8b5A) |
 
 > **Network:** Cronos Testnet (Chain ID: 338)
 
